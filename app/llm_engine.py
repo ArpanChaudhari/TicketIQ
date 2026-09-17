@@ -4,7 +4,7 @@ import pandas as pd
 from dotenv import load_dotenv
 from groq import Groq
 from app.data_loader import get_dataframe
-
+from typing import Any
 
 # 1. Load environment variable from .env file
 load_dotenv()
@@ -43,38 +43,56 @@ Important rules:
 5. Do not add explanations or markdown.
 """
 
+
 # 5. Ask Function - Takes the user's question and gets Python code from the LLM
-def ask_question(user_question: str)->str:
+def ask_question(user_question: str) -> Any:
     try:
         # Ask Groq to write the code
         response = client.chat.completions.create(
-            model = "openai/gpt-oss-120b",
+            model="openai/gpt-oss-120b",
             messages=[
-                {'role':'system', 'content':System_Prompt},
-                {'role':'user', 'content': user_question}
+                {"role": "system", "content": System_Prompt},
+                {"role": "user", "content": user_question},
             ],
-            temperature=0.0 # highly analytical, deterministic, and strict (no creativity).
+            temperature=0.0,  # highly analytical, deterministic, and strict (no creativity).
         )
 
         # Extract the text response
         generated_code = response.choices[0].message.content.strip()
 
-        # Sometimes LLMs ignore instruction and wrap code in markdown anyway. 
+        # Sometimes LLMs ignore instruction and wrap code in markdown anyway.
         if generated_code.startswith("````python"):
-            generated_code = generated_code.replace("```python","").replace("```","").strip()
+            generated_code = (
+                generated_code.replace("```python", "").replace("```", "").strip()
+            )
         elif generated_code.startswith("```"):
             generated_code = generated_code.replace("```", "").strip()
-            
+
         # Execute  the code safely
-        namespace = {'df':df, 'pd':pd} # We use namespace to store and access variables created during execution.
+        namespace = {
+            "df": df,
+            "pd": pd,
+        }  # We use namespace to store and access variables created during execution.
 
         exec(generated_code, namespace)
 
         # Return result
-        if 'result' in namespace: # Take the 'result' variable that we told the LLM to create
-            return str(namespace['result'])
+        if "result" in namespace:
+
+            result = namespace["result"]
+
+            # If result is a DataFrame, convert to list of dicts
+            if isinstance(result, pd.DataFrame):
+                return result.fillna("N/A").to_dict(orient="records")
+
+            # If result is a Series, convert to dict
+            elif isinstance(result, pd.Series):
+                return result.fillna("N/A").to_dict()
+
+            else:
+                return str(result)
         else:
             return "Error: No result was generated. Please try asking a different question."
-        
+
     except Exception as e:
         return f"Error executing code: {e}"
