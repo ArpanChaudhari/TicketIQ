@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TicketIQ | AI Support Analyzer</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <img src="assets/ticketiq_logo.png" alt="TicketIQ logo"
+          onerror="this.style.display='none';document.getElementById('brandFallback').style.display='grid'">
+        <div id="brandFallback" class="brand-fallback" style="display:none">TQ</div>
+        <div>
+          <div class="brand-name">TicketIQ</div>
+          <div class="brand-sub">AI Support Ticket Analyzer</div>
+        </div>
+      </div>
+
+      <div class="sidebar-label">Workspace</div>
+      <nav class="nav">
+        <button class="nav-item active" data-page="query"><span>✦</span> Ask TicketIQ</button>
+        <button class="nav-item" data-page="anomalies"><span>◫</span> Anomaly Dashboard</button>
+        <button class="nav-item" data-page="explorer"><span>▦</span> Data Explorer</button>
+      </nav>
+
+      <div class="connection-block">
+        <div class="sidebar-label">API connection</div>
+        <button id="checkConnection" class="btn full">↻ Check connection</button>
+        <div id="connectionStatus" class="connection-status"><span class="status-dot"></span> Checking…</div>
+        <div id="ticketCount" class="muted small"></div>
+      </div>
+      <div class="sidebar-footer">TicketIQ <span>Support intelligence</span></div>
+    </aside>
+
+    <main class="main">
+      <header class="mobile-header">
+        <button id="mobileMenu" class="icon-btn" aria-label="Toggle navigation">☰</button>
+        <strong>TicketIQ</strong>
+      </header>
+
+      <section id="page-query" class="page active">
+        <div class="page-heading">
+          <div class="eyebrow">AI WORKSPACE</div>
+          <h1>Ask your tickets</h1>
+          <p>Explore support activity in plain language and turn questions into useful answers.</p>
+        </div>
+
+        <section class="panel">
+          <h2>✦ What would you like to know?</h2>
+          <p class="section-copy">Ask about priorities, response times, categories, ratings, or agent workloads.</p>
+          <label class="sr-only" for="questionInput">Your question</label>
+          <textarea id="questionInput"
+            placeholder="Example: Show me unresolved critical tickets older than 12 hours…"></textarea>
+          <div class="form-footer">
+            <span class="muted small">TicketIQ will analyze the latest data returned by your API.</span>
+            <button id="askButton" class="btn primary">Ask TicketIQ <span>→</span></button>
+          </div>
+          <div id="queryMessage" class="message" role="status"></div>
+        </section>
+
+        <div class="section-heading">
+          <div>
+            <h2>Try an example</h2>
+            <p>Choose a prompt to place it in the question box.</p>
+          </div>
+        </div>
+        <div id="examples" class="examples-grid"></div>
+
+        <section id="queryResultSection" class="result-section" hidden>
+          <div class="section-heading">
+            <div>
+              <h2>TicketIQ answer</h2>
+              <p>Results from your latest question.</p>
+            </div>
+          </div>
+          <div id="queryResult"></div>
+        </section>
+      </section>
+
+      <section id="page-anomalies" class="page">
+        <div class="page-heading heading-with-action">
+          <div>
+            <div class="eyebrow">OPERATIONS MONITOR</div>
+            <h1>Anomaly intelligence</h1>
+            <p>Spot unusual patterns and focus the team on tickets that need attention.</p>
+          </div>
+          <button id="refreshAnomalies" class="btn">↻ Refresh</button>
+        </div>
+        <div id="anomalyMessage" class="message"></div>
+        <div id="anomalyMetrics" class="stats-grid"></div>
+        <div class="section-heading">
+          <div>
+            <h2>Anomalies by type</h2>
+            <p>A quick view of the most frequent signal groups.</p>
+          </div>
+        </div>
+        <div id="typeCards" class="anomaly-grid"></div>
+        <details class="details">
+          <summary>View complete type breakdown</summary>
+          <div id="typeTable"></div>
+        </details>
+        <div class="section-heading">
+          <div>
+            <h2>Anomalies by severity</h2>
+            <p>Review how detected signals are distributed by urgency.</p>
+          </div>
+        </div>
+        <div id="severityCards" class="anomaly-grid"></div>
+        <details class="details">
+          <summary>View complete severity breakdown</summary>
+          <div id="severityTable"></div>
+        </details>
+        <div class="section-heading">
+          <div>
+            <h2>Explore anomalies</h2>
+            <p>Choose either filter to inspect matching records.</p>
+          </div>
+        </div>
+        <section class="panel filter-panel">
+          <label> Anomaly type <select id="anomalyTypeFilter">
+              <option value="">All types</option>
+            </select></label>
+          <label> Severity <select id="anomalySeverityFilter">
+              <option value="">All severities</option>
+            </select></label>
+        </section>
+        <div id="filteredAnomalyCount" class="count-badge"></div>
+        <div id="filteredAnomalies"></div>
+        <button id="downloadAnomalies" class="btn primary download-btn" hidden>↓ Download filtered anomalies</button>
+      </section>
+
+      <section id="page-explorer" class="page">
+        <div class="page-heading heading-with-action">
+          <div>
+            <div class="eyebrow">DATA WORKSPACE</div>
+            <h1>Ticket explorer</h1>
+            <p>Browse, filter, and export the support ticket dataset returned by your API.</p>
+          </div>
+          <button id="refreshTickets" class="btn">↻ Refresh</button>
+        </div>
+        <div id="ticketsMessage" class="message"></div>
+        <div id="ticketMetric" class="stats-grid"></div>
+        <div class="section-heading">
+          <div>
+            <h2>Filter tickets</h2>
+            <p>Narrow the dataset by category, priority, or status.</p>
+          </div>
+        </div>
+        <section class="panel filter-panel">
+          <label>Category <select id="categoryFilter">
+              <option value="">All</option>
+            </select></label>
+          <label>Priority <select id="priorityFilter">
+              <option value="">All</option>
+            </select></label>
+          <label>Status <select id="statusFilter">
+              <option value="">All</option>
+            </select></label>
+        </section>
+        <div class="section-heading compact-heading">
+          <div>
+            <h2>Tickets</h2>
+          </div><span id="ticketShownCount" class="count-badge"></span>
+        </div>
+        <div id="ticketTable"></div>
+        <button id="downloadTickets" class="btn primary download-btn" hidden>↓ Download filtered tickets</button>
+      </section>
+    </main>
+  </div>
+  <div id="toast" class="toast" role="status"></div>
+  <script src="script.js"></script>
+</body>
+
+</html>
