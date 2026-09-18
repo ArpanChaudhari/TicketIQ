@@ -13,5 +13,4 @@ __pycache__/
 .env.*
 
 # Self Analysis
-test_data.py
 data_Visualize.ipynb
