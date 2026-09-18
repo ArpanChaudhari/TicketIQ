@@ -12,9 +12,7 @@
   <div class="app-shell">
     <aside class="sidebar">
       <div class="brand">
-        <img src="assets/ticketiq_logo.png" alt="TicketIQ logo"
-          onerror="this.style.display='none';document.getElementById('brandFallback').style.display='grid'">
-        <div id="brandFallback" class="brand-fallback" style="display:none">TQ</div>
+        <div id="brandFallback" class="brand-fallback">TQ</div>
         <div>
           <div class="brand-name">TicketIQ</div>
           <div class="brand-sub">AI Support Ticket Analyzer</div>
@@ -30,7 +28,7 @@
 
       <div class="connection-block">
         <div class="sidebar-label">API connection</div>
-        <button id="checkConnection" class="btn full">↻ Check connection</button>
+        <button id="checkConnection" class="btn full">↻ Refresh connection & data</button>
         <div id="connectionStatus" class="connection-status"><span class="status-dot"></span> Checking…</div>
         <div id="ticketCount" class="muted small"></div>
       </div>
@@ -72,11 +70,12 @@
         <div id="examples" class="examples-grid"></div>
 
         <section id="queryResultSection" class="result-section" hidden>
-          <div class="section-heading">
+          <div class="section-heading compact-heading">
             <div>
               <h2>TicketIQ answer</h2>
               <p>Results from your latest question.</p>
             </div>
+            <span id="queryResultCount" class="count-badge"></span>
           </div>
           <div id="queryResult"></div>
         </section>
