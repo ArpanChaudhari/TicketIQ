@@ -12,7 +12,7 @@ from typing import Any
 load_dotenv()
 
 # 2. Initialize the Groq client
-client = Groq(api_key=os.getenv("Groq_API_KEY"))
+client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
 # 3. Load our data
 df = get_dataframe()
