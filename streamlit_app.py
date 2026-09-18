@@ -1,14 +1,11 @@
 from __future__ import annotations
 
-import json
+import os
 from typing import Any
 
 import pandas as pd
+import requests
 import streamlit as st
-
-from app.anomaly_detector import detect_anomalies
-from app.data_loader import get_dataframe
-
 
 st.set_page_config(
     page_title="TicketIQ | AI Support Analyzer",
@@ -26,6 +23,9 @@ EXAMPLE_QUESTIONS = [
     "Show me tickets with customer ratings below 3.",
     "Which agents have the highest number of unresolved tickets?",
 ]
+
+API_BASE_URL = os.getenv("TICKETIQ_API_BASE_URL", "http://localhost:8000")
+API_TIMEOUT_SECONDS = 90
 
 
 def inject_styles() -> None:
@@ -439,17 +439,57 @@ def inject_styles() -> None:
     )
 
 
+def api_request(
+    endpoint: str, method: str = "GET", payload: dict[str, Any] | None = None
+) -> Any:
+    """Call the FastAPI backend and return parsed JSON."""
+    url = f"{API_BASE_URL}{endpoint}"
+    try:
+        if method == "POST":
+            response = requests.post(url, json=payload, timeout=API_TIMEOUT_SECONDS)
+        else:
+            response = requests.get(url, timeout=API_TIMEOUT_SECONDS)
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.ConnectionError as exc:
+        raise RuntimeError(
+            f"Could not connect to the TicketIQ API at {API_BASE_URL}. "
+            "Start the connected app with: python run.py"
+        ) from exc
+    except requests.exceptions.Timeout as exc:
+        raise RuntimeError(
+            "The TicketIQ API request timed out. Try again or check the backend logs."
+        ) from exc
+    except requests.exceptions.RequestException as exc:
+        raise RuntimeError(f"TicketIQ API request failed: {exc}") from exc
+
+
+@st.cache_data(show_spinner=False)
+def load_health() -> dict[str, Any]:
+    return api_request("/api/health")
+
+
 @st.cache_data(show_spinner=False)
 def load_tickets() -> pd.DataFrame:
-    return get_dataframe()
+    payload = api_request("/api/tickets")
+    return pd.DataFrame(payload.get("tickets", []))
 
 
 @st.cache_data(show_spinner=False)
 def load_anomalies() -> pd.DataFrame:
-    return pd.DataFrame(detect_anomalies())
+    payload = api_request("/api/anomalies")
+    return pd.DataFrame(payload.get("anomalies", []))
+
+
+def ask_ticketiq_api(question: str) -> Any:
+    payload = api_request("/api/query", method="POST", payload={"question": question})
+    if not payload.get("success", False):
+        return payload.get("answer", "The API returned an unsuccessful response.")
+    return payload.get("answer")
 
 
 def clear_cached_data() -> None:
+    load_health.clear()
     load_tickets.clear()
     load_anomalies.clear()
 
@@ -502,7 +542,9 @@ def render_answer(answer: Any) -> None:
         st.caption(f"{len(result_df):,} rows")
         st.dataframe(result_df, width="stretch", hide_index=True)
         if not result_df.empty:
-            dataframe_download(result_df, "Download query results", "ticketiq_query_results.csv")
+            dataframe_download(
+                result_df, "Download query results", "ticketiq_query_results.csv"
+            )
         return
 
     if isinstance(answer, dict):
@@ -516,7 +558,9 @@ def render_answer(answer: Any) -> None:
             st.caption(f"{len(nested_table):,} rows")
             st.dataframe(nested_table, width="stretch", hide_index=True)
             if not nested_table.empty:
-                dataframe_download(nested_table, "Download query results", "ticketiq_query_results.csv")
+                dataframe_download(
+                    nested_table, "Download query results", "ticketiq_query_results.csv"
+                )
         else:
             st.json(answer)
         return
@@ -527,7 +571,8 @@ def render_answer(answer: Any) -> None:
     )
 
 
-def render_sidebar(ticket_count: int) -> str:
+def render_sidebar(health: dict[str, Any]) -> str:
+    ticket_count = int(health.get("ticket_count", 0))
     with st.sidebar:
         st.markdown(
             """
@@ -542,14 +587,18 @@ def render_sidebar(ticket_count: int) -> str:
             unsafe_allow_html=True,
         )
 
-        st.markdown('<div class="sidebar-label">Workspace</div>', unsafe_allow_html=True)
+        st.markdown(
+            '<div class="sidebar-label">Workspace</div>', unsafe_allow_html=True
+        )
         page = st.radio(
             "Workspace",
             ["Ask TicketIQ", "Anomaly Dashboard", "Data Explorer"],
             label_visibility="collapsed",
         )
 
-        st.markdown('<div class="sidebar-label">API connection</div>', unsafe_allow_html=True)
+        st.markdown(
+            '<div class="sidebar-label">API connection</div>', unsafe_allow_html=True
+        )
         if st.button("Refresh connection & data", width="stretch"):
             clear_cached_data()
             st.success("Data refreshed.")
@@ -558,6 +607,7 @@ def render_sidebar(ticket_count: int) -> str:
             f"""
             <div class="small-muted">
               <strong style="color:#15803d;">Connected</strong><br>
+              FastAPI: {API_BASE_URL}<br>
               {ticket_count:,} tickets available
             </div>
             <div class="sidebar-footer">
@@ -601,7 +651,7 @@ def ask_page() -> None:
     left, right = st.columns([1, 0.24])
     with left:
         st.markdown(
-            '<div class="small-muted">TicketIQ will analyze the latest data returned by your Python backend.</div>',
+            '<div class="small-muted">TicketIQ will analyze the latest data returned by the FastAPI backend.</div>',
             unsafe_allow_html=True,
         )
     with right:
@@ -612,9 +662,7 @@ def ask_page() -> None:
             st.error("Enter a question before asking TicketIQ.")
         else:
             with st.spinner("Analyzing your tickets..."):
-                from app.llm_engine import ask_question
-
-                st.session_state.query_result = ask_question(question)
+                st.session_state.query_result = ask_ticketiq_api(question)
                 st.session_state.query_question = question
             st.success("Analysis complete.")
 
@@ -652,9 +700,15 @@ def anomaly_page() -> None:
 
     col1, col2 = st.columns(2)
     with col1:
-        st.markdown(metric_card("All signals", "Total anomalies", f"{total_count:,}"), unsafe_allow_html=True)
+        st.markdown(
+            metric_card("All signals", "Total anomalies", f"{total_count:,}"),
+            unsafe_allow_html=True,
+        )
     with col2:
-        st.markdown(metric_card("Needs attention", "Critical anomalies", f"{critical_count:,}"), unsafe_allow_html=True)
+        st.markdown(
+            metric_card("Needs attention", "Critical anomalies", f"{critical_count:,}"),
+            unsafe_allow_html=True,
+        )
 
     if anomalies_df.empty:
         st.info("No anomalies were returned by the detector.")
@@ -681,7 +735,9 @@ def anomaly_page() -> None:
     severity_cols = st.columns(4)
     for index, (label, count) in enumerate(severity_counts.items()):
         with severity_cols[index % 4]:
-            st.markdown(count_card(label, int(count), "Urgency"), unsafe_allow_html=True)
+            st.markdown(
+                count_card(label, int(count), "Urgency"), unsafe_allow_html=True
+            )
 
     with st.expander("View complete severity breakdown"):
         st.dataframe(
@@ -697,12 +753,14 @@ def anomaly_page() -> None:
     with filter_col1:
         anomaly_type = st.selectbox(
             "Anomaly type",
-            ["All types"] + sorted(anomalies_df["anomaly_type"].dropna().unique().tolist()),
+            ["All types"]
+            + sorted(anomalies_df["anomaly_type"].dropna().unique().tolist()),
         )
     with filter_col2:
         severity = st.selectbox(
             "Severity",
-            ["All severities"] + sorted(anomalies_df["severity"].dropna().unique().tolist()),
+            ["All severities"]
+            + sorted(anomalies_df["severity"].dropna().unique().tolist()),
         )
 
     filtered_df = anomalies_df.copy()
@@ -717,32 +775,45 @@ def anomaly_page() -> None:
         st.caption(f"{len(filtered_df):,} matching anomalies")
         st.dataframe(filtered_df, width="stretch", hide_index=True)
         if not filtered_df.empty:
-            dataframe_download(filtered_df, "Download filtered anomalies", "ticketiq_filtered_anomalies.csv")
+            dataframe_download(
+                filtered_df,
+                "Download filtered anomalies",
+                "ticketiq_filtered_anomalies.csv",
+            )
 
 
 def explorer_page(df: pd.DataFrame) -> None:
     page_heading(
         "DATA WORKSPACE",
         "Ticket explorer",
-        "Browse, filter, and export the support ticket dataset returned by your data loader.",
+        "Browse, filter, and export the support ticket dataset returned by the FastAPI backend.",
     )
 
     if st.button("Refresh tickets"):
         load_tickets.clear()
         st.rerun()
 
-    st.markdown(metric_card("Current dataset", "Total tickets", f"{len(df):,}"), unsafe_allow_html=True)
+    st.markdown(
+        metric_card("Current dataset", "Total tickets", f"{len(df):,}"),
+        unsafe_allow_html=True,
+    )
 
     st.markdown("## Filter tickets")
     st.caption("Narrow the dataset by category, priority, or status.")
 
     filter_col1, filter_col2, filter_col3 = st.columns(3)
     with filter_col1:
-        category = st.selectbox("Category", ["All"] + sorted(df["category"].dropna().unique().tolist()))
+        category = st.selectbox(
+            "Category", ["All"] + sorted(df["category"].dropna().unique().tolist())
+        )
     with filter_col2:
-        priority = st.selectbox("Priority", ["All"] + sorted(df["priority"].dropna().unique().tolist()))
+        priority = st.selectbox(
+            "Priority", ["All"] + sorted(df["priority"].dropna().unique().tolist())
+        )
     with filter_col3:
-        status = st.selectbox("Status", ["All"] + sorted(df["status"].dropna().unique().tolist()))
+        status = st.selectbox(
+            "Status", ["All"] + sorted(df["status"].dropna().unique().tolist())
+        )
 
     filtered_df = df.copy()
     if category != "All":
@@ -756,13 +827,24 @@ def explorer_page(df: pd.DataFrame) -> None:
     st.caption(f"{len(filtered_df):,} shown")
     st.dataframe(filtered_df, width="stretch", hide_index=True)
     if not filtered_df.empty:
-        dataframe_download(filtered_df, "Download filtered tickets", "ticketiq_filtered_tickets.csv")
+        dataframe_download(
+            filtered_df, "Download filtered tickets", "ticketiq_filtered_tickets.csv"
+        )
 
 
 def main() -> None:
     inject_styles()
-    df = load_tickets()
-    page = render_sidebar(len(df))
+    try:
+        health = load_health()
+        df = load_tickets()
+    except RuntimeError as exc:
+        st.error(str(exc))
+        st.info(
+            "Start the connected backend first, or use `python run.py` to launch FastAPI and Streamlit together."
+        )
+        return
+
+    page = render_sidebar(health)
 
     if page == "Ask TicketIQ":
         ask_page()
