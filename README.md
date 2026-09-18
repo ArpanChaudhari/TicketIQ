@@ -4,6 +4,8 @@ TicketIQ is a Python-based AI Support Ticket Analyzer that processes customer su
 
 The primary demo starts both services together with `python run.py`. Streamlit acts as the frontend client and calls the FastAPI endpoints for health checks, ticket data, anomalies, and LLM-powered query answers.
 
+**Live Demo:** [TicketIQ](https://ticketiq.streamlit.app/)
+
 ---
 
 ## Features
